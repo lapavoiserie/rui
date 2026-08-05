@@ -44,7 +44,7 @@ class StateCheck {
 		// The sink fires on application writes only.
 		var s = new State("a");
 		var pushed = [];
-		s.onValueChanged(v -> pushed.push(v));
+		s.setPlatformSink(v -> pushed.push(v));
 		s.set("b");
 		check("sink fires on app write", pushed, ["b"]);
 		s.set("b");
@@ -64,13 +64,13 @@ class StateCheck {
 		// value is an alias for get()/set(), sink included.
 		var v = new State(0);
 		var vPushed = [];
-		v.onValueChanged(x -> vPushed.push(x));
+		v.setPlatformSink(x -> vPushed.push(x));
 		v.value = 7;
 		check("value setter writes", v.value, 7);
 		check("value setter runs the sink", vPushed, [7]);
 
 		// Detaching the sink.
-		v.onValueChanged(null);
+		v.setPlatformSink(null);
 		v.set(8);
 		check("detached sink stays silent", vPushed, [7]);
 

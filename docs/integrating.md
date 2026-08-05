@@ -73,7 +73,7 @@ Register a **sink** to push application writes outward, and route writes coming
 echoing back:
 
 ```haxe
-text.onValueChanged(v -> field.setText(v));                     // Haxe -> platform
+text.setPlatformSink(v -> field.setText(v));                     // Haxe -> platform
 field.onTextChanged(() -> text.applyExternal(field.getText())); // platform -> Haxe
 ```
 

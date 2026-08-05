@@ -14,7 +14,7 @@ import rui.Signal;
 
 	```haxe
 	var count = new State(0);
-	count.onValueChanged(v -> pushToPlatform(v)); // the library wires this once
+	count.setPlatformSink(v -> pushToPlatform(v)); // the library wires this once
 
 	count.set(1);           // effects re-run, sink fires  (app write)
 	count.applyExternal(2); // effects re-run, sink SILENT (platform write)
@@ -90,7 +90,7 @@ class State<T> {
 		Register the platform sink. One per state: registering again replaces
 		it. Pass `null` to detach.
 	**/
-	public function onValueChanged(sink:Null<T->Void>):Void {
+	public function setPlatformSink(sink:Null<T->Void>):Void {
 		_sink = sink;
 	}
 

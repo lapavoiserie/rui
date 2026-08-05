@@ -26,7 +26,7 @@ registered once:
 
 ```haxe
 var text = new State("");
-text.onValueChanged(v -> nativeField.setText(v));
+text.setPlatformSink(v -> nativeField.setText(v));
 ```
 
 The sink runs on **application** writes only:
@@ -47,7 +47,7 @@ fights the caret while the user types.
 
 ```haxe
 // wiring a native field, both directions
-text.onValueChanged(v -> field.setText(v));       // Haxe  -> platform
+text.setPlatformSink(v -> field.setText(v));       // Haxe  -> platform
 field.onTextChanged(() -> text.applyExternal(field.getText())); // platform -> Haxe
 ```
 
@@ -71,7 +71,7 @@ libraries. The shared core carries only what they agree on.
 | `set(v:T)` / `value = v` | app write: effects, then sink |
 | `peek():T` | untracked read |
 | `applyExternal(v:T)` | platform write: effects only |
-| `onValueChanged(sink:Null<T->Void>)` | register the sink; `null` detaches |
+| `setPlatformSink(sink:Null<T->Void>)` | register the sink; `null` detaches |
 | `name:String` | `""` when unnamed |
 | `dispose()` | drop subscribers and sink |
 
