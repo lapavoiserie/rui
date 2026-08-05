@@ -42,6 +42,12 @@ sink that pushes a new value to the native side.
 
 See [Integrating rui](integrating.md) for what a platform library has to provide.
 
+**Rendering is not here, by design.** What a view tree node *is* — and the two
+contracts a renderer consumes it through — lives in
+[`nui`](https://lapavoiserie.github.io/nui/), a separate library that depends on
+`rui`. Keeping them apart keeps this one to state and change propagation, which
+is the whole point of the trim it went through.
+
 ## Install
 
 Most of the time you get it transitively: every La Pavoiserie backend declares it

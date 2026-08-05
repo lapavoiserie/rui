@@ -105,6 +105,11 @@ rebuilding the host**.
 The original epikDX extraction did carry a virtual DOM, a component macro, a DOM
 renderer and a networking layer. Nothing consumed them, and the component macro
 was still hard-wired to `epikowa.epikUI`, so they were removed rather than
-maintained as dead weight. They remain in the repository's git history. A shared
-render model, if one comes, will be designed against the backends' real needs
-rather than inherited.
+maintained as dead weight. They remain in the repository's git history.
+
+**The shared render model exists now, and it lives elsewhere on purpose:**
+[`nui`](https://lapavoiserie.github.io/nui/) sits above `rui` and describes what
+a view tree node is — type, children, key, typed properties, ordered modifiers,
+actions — plus the two contracts a renderer consumes it through. It was designed
+against the backends' real needs rather than inherited, and kept out of `rui` so
+that this scope stays true.
