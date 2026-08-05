@@ -32,12 +32,21 @@ count.value = 1;                                   // prints nothing: unchanged
 Each platform library rendered natively but reimplemented its own notion of
 reactive state — a dirty flag here, a listener list there, a platform-native
 observable elsewhere. Sharing that layer means one semantics of *what changed*
-across every target, and lets `mui` expose a single `State<T>` regardless of the
-backend selected at compile time.
+across every target.
+
+**All five backends now build on it.** `sui`, `aui`, `wui`, `cui` and `qui` each
+have a `State<T>` extending [`rui.state.State`](state.md), so the same reads,
+writes and untracked peeks behave identically everywhere, and `mui` can document
+one contract instead of five. Each backend keeps only its *platform half* — the
+sink that pushes a new value to the native side.
 
 See [Integrating rui](integrating.md) for what a platform library has to provide.
 
 ## Install
+
+Most of the time you get it transitively: every La Pavoiserie backend declares it
+as a dependency, so `-lib cui` (or `sui`, `aui`, `wui`) already brings it in.
+Standalone:
 
 ```bash
 haxelib git rui https://github.com/lapavoiserie/rui
