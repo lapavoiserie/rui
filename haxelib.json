@@ -2,7 +2,7 @@
     "name": "rui",
     "url": "https://github.com/lapavoiserie/rui",
     "license": "MIT",
-    "description": "Reactive UI core for La Pavoiserie — fine-grained signals, effects, observables, immutable structures, and a virtual DOM with pluggable per-target renderers.",
+    "description": "Reactive core for La Pavoiserie — fine-grained signals, effects, observables and immutable structures, shared by the platform UI libraries.",
     "version": "0.1.0",
     "classPath": "src",
     "tags": ["reactive", "signals", "ui", "state", "haxe"],

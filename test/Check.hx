@@ -1,9 +1,6 @@
 import rui.Signal;
 import rui.structures.ImmutableList;
 import rui.Observable;
-import rui.VirtualDom;
-import rui.Component;
-import rui.Renderer;
 
 class Todo implements Observable {
 	public var text:String;
