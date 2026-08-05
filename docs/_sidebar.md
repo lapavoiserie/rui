@@ -2,6 +2,7 @@
 - [Getting Started](getting-started.md)
 - **Core**
   - [Signals & Effects](signals.md)
+  - [State](state.md)
   - [Observable](observable.md)
   - [ImmutableList](immutable-list.md)
 - [Integrating rui](integrating.md)

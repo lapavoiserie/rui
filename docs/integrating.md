@@ -51,31 +51,37 @@ the effects are created*, not of rui.
 
 ## Backing a `State<T>` with a signal
 
-Most libraries expose their own state cell. Backing it with a signal is the
-whole job:
+Most libraries expose their own state cell. Don't rewrite the wrapper — extend
+[`rui.state.State<T>`](state.md), which is that wrapper:
 
 ```haxe
-class State<T> {
-    var _sig:Signal<T>;
+class State<T> extends rui.state.State<T> {
+    public function new(initial:T, ?name:String) super(initial, name);
 
-    public function new(initial:T) _sig = new Signal(initial);
-
-    public function get():T return _sig.value;   // tracked
-    public function set(v:T):Void _sig.value = v;
-    public function peek():T return _sig.peek(); // untracked
+    // only what your library adds on top
+    public function setTo(v:T):State<T> { set(v); return this; }
 }
 ```
 
-Reads inside the render effect now subscribe it automatically, and writes
-re-run it. Nothing in the app code changes.
+Reads inside the render effect now subscribe it automatically, and writes re-run
+it. Nothing in the app code changes.
 
-### If the platform has its own reactive primitive
+### Pushing to the platform, and taking writes back
 
-Some targets already have one — a Compose `MutableState`, a SwiftUI `@State`, a
-listener list, a dirty flag. Keep **one** source of truth: the signal. Mirror it
-outward from an effect, and route writes coming back *from* the platform through
-a silent path that updates the signal without echoing back to the platform.
-Otherwise a write bounces between the two.
+Register a **sink** to push application writes outward, and route writes coming
+*from* the platform through `applyExternal`, which reaches effects without
+echoing back:
+
+```haxe
+text.onValueChanged(v -> field.setText(v));                     // Haxe -> platform
+field.onTextChanged(() -> text.applyExternal(field.getText())); // platform -> Haxe
+```
+
+This matters most when the target already has its own reactive primitive — a
+Compose `MutableState`, a SwiftUI `@State`, a listener list, a dirty flag. Keep
+**one** source of truth (the signal), mirror it outward through the sink, and
+take writes back through `applyExternal`. Otherwise a value bounces between the
+two.
 
 ## Interpreted targets
 
