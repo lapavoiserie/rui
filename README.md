@@ -19,6 +19,9 @@ nothing else. Rendering belongs to each platform library.
 Note that `Effect` lives in the `rui.Signal` module — `import rui.Signal;`
 brings both.
 
+**Documentation:** `docs/` (docsify — serve it with `docsify serve docs`, or any
+static server).
+
 ## Usage
 
 ```haxe
