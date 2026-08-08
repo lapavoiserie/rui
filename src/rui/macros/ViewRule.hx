@@ -141,6 +141,28 @@ class ViewRule {
 	static function walk(e:TypedExpr, owner:ClassType):Void {
 		if (e == null) return;
 
+		// An **action** is not a view.
+		//
+		// A closure written inside `body()` but returning `Void` is a command --
+		// a Button's handler -- and it runs on an event, long after the view was
+		// built. What it reads cannot be something the display depends on, so
+		// judging it accuses code that is doing nothing wrong. `sui`'s
+		// dynamic-hello was the case: a tap counter incremented in a handler and
+		// only ever printed.
+		//
+		// A closure that *returns* something is the other kind -- a view builder
+		// (`ForEach(items, item -> new Text(item))`) -- and it runs as part of
+		// rendering, so it is judged like the rest of the view.
+		//
+		// This narrows where the rule looks, never what it accepts: a read at
+		// event time cannot be a view dependency, and the same field read by the
+		// view itself is still caught, right where it is read.
+		switch (e.expr) {
+			case TFunction(fn) if (isVoid(fn.t)):
+				return;
+			case _:
+		}
+
 		switch (e.expr) {
 			// A field *read*. A call through a field is code, not state.
 			case TField(_, fa):
@@ -158,6 +180,13 @@ class ViewRule {
 		}
 
 		e.iter(function(sub) walk(sub, owner));
+	}
+
+	static function isVoid(t:Type):Bool {
+		return switch (t.follow()) {
+			case TAbstract(ref, _): ref.get().name == "Void" && ref.get().pack.length == 0;
+			case _: false;
+		};
 	}
 
 	static function fieldOf(fa:FieldAccess):Null<ClassField> {
