@@ -111,7 +111,7 @@ class Signal<T> {
 			cleanupObservable(_value); // Clean up old observable
 			_value = newValue;
 			checkObservable(_value); // Check and subscribe to new observable
-			notify();
+			notifySubscribers();
 		}
 		return _value;
 	}
@@ -119,14 +119,14 @@ class Signal<T> {
 	function checkObservable(v:Dynamic) {
 		if (Std.isOfType(v, Observable)) {
 			var obs:Observable = cast v;
-			obs.subscribe(notify); // Subscribe to the observable's changes
+			obs.subscribe(notifySubscribers); // Subscribe to the observable's changes
 		}
 	}
 
 	function cleanupObservable(v:Dynamic) {
 		if (Std.isOfType(v, Observable)) {
 			var obs:Observable = cast v;
-			obs.unsubscribe(notify); // Unsubscribe from the observable's changes
+			obs.unsubscribe(notifySubscribers); // Unsubscribe from the observable's changes
 		}
 	}
 
@@ -149,7 +149,17 @@ class Signal<T> {
 		_subscribers = [];
 	}
 
-	function notify() {
+	/**
+		Wake every subscriber.
+
+		**Not called `notify`.** `java.lang.Object.notify()` is final, so a Haxe
+		method by that name makes the class impossible to load on the JVM:
+		`IncompatibleClassChangeError` at the first `new Signal(...)`, which on
+		`aui` means the first state an app creates. Nothing catches this at
+		compile time — Haxe checks it against no JVM base class — and the four
+		other backends never load `rui` on a JVM, so it stayed invisible.
+	**/
+	function notifySubscribers() {
 		// Copy subscribers to avoid issues if listeners modify subscriptions during execution
 		var subs = _subscribers.copy();
 		for (sub in subs) {
