@@ -35,7 +35,7 @@ check() {
 			echo "  ok   $fixture compile"
 		else
 			failures=$((failures + 1))
-			echo "  FAIL $fixture aurait du compiler"
+			echo "  FAIL $fixture should have compiled"
 			echo "$out" | sed 's/^/         /'
 		fi
 		return
@@ -43,35 +43,35 @@ check() {
 
 	if [ $code -eq 0 ]; then
 		failures=$((failures + 1))
-		echo "  FAIL $fixture aurait du etre refuse"
+		echo "  FAIL $fixture should have been refused"
 	elif ! echo "$out" | grep -q "\"$field\""; then
 		# Refused, but possibly for an unrelated reason.
 		failures=$((failures + 1))
-		echo "  FAIL $fixture refuse, mais sans nommer \"$field\""
+		echo "  FAIL $fixture refused, but without naming \"$field\""
 		echo "$out" | sed 's/^/         /'
 	else
-		echo "  ok   $fixture refuse en nommant \"$field\""
+		echo "  ok   $fixture refused, naming \"$field\""
 	fi
 }
 
 echo "ViewRule"
 
-# Ce que la regle accepte.
+# What the rule accepts.
 check ObservableState    pass
 check FinalField         pass
 check ImmutableCollection pass
 check LocalOnly          pass
 
-# Une action n'est pas une vue : la closure rend Void et s'execute a
-# l'evenement, donc rien a l'ecran n'en depend.
+# An action is not a view: the closure returns Void and runs on an event, so
+# nothing on screen depends on it.
 check ActionClosure      pass
 
-# Ce qu'elle refuse.
+# What it refuses.
 check MutableRead        reject count
 
-# Le garde-fou du point precedent : une closure qui *rend* une vue fait partie
-# du rendu, donc elle reste jugee. Sans ce cas, ignorer toutes les closures
-# passerait inapercu.
+# The guard on the point above: a closure that *returns* a view is part of
+# rendering, so it stays judged. Without this case, skipping every closure would
+# pass unnoticed.
 check BuilderClosure     reject hidden
 
 if [ $failures -eq 0 ]; then

@@ -11,7 +11,7 @@ class BuilderClosure extends viewrule.App {
 
 	override public function body():viewrule.View {
 		return new viewrule.View().children(function():viewrule.View {
-			return new viewrule.View().text('caché : $hidden');
+			return new viewrule.View().text('hidden: $hidden');
 		});
 	}
 }
