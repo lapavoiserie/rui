@@ -169,10 +169,10 @@ class ViewRule {
 				var cf = fieldOf(fa);
 				if (cf != null && declaredBy(fa, owner) && !isCallable(cf)) {
 					if (!acceptable(cf)) {
-						Context.error('Une vue ne peut lire que de l\'immuable ou de l\'observable.\n'
-							+ '  "${cf.name}" est une variable mutable et non observable, donc rien\n'
-							+ '  ne peut prévenir la vue quand elle change : l\'affichage resterait figé.\n'
-							+ '  Rendez-la `final`, ou déclarez-la @:state, ou utilisez ImmutableList.',
+						Context.error('A view may only read what is immutable or observable.\n'
+							+ '  "${cf.name}" is a plain mutable field, so nothing can tell the view\n'
+							+ '  when it changes: what is on screen would quietly go stale.\n'
+							+ '  Make it `final`, declare it @:state, or use ImmutableList.',
 							cf.pos);
 					}
 				}
