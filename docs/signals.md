@@ -114,6 +114,18 @@ Read from inside the effect, so it registers on the effect currently running.
 A runnable demonstration is in `examples/polling` — a timer re-created when its
 interval changes, where the whole failure mode is visible in the output.
 
+The case this is really for is watching something that changes outside the
+program. `kui`'s `examples/network-app` does exactly that: a capability that
+answers "is the network reachable" is polled on a timer owned by an effect, and
+the application never learns a timer exists — views read a signal. Verified with
+the link taken down and brought back:
+
+```
+net: start  — online
+net: change — offline
+net: stopped — offline      # the quit ran the cleanup
+```
+
 ### There is no `useEffect` here, and that is deliberate
 
 `useEffect` exists because a React component function is re-called with no
