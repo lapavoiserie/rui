@@ -126,6 +126,30 @@ net: change — offline
 net: stopped — offline      # the quit ran the cleanup
 ```
 
+## `Lifetime` — one moment to undo everything
+
+`Effect.onCleanup` answers "undo what *this effect* did, before it runs again".
+`rui.Lifetime` answers the other half: "undo everything, because whatever owned
+it is over".
+
+```haxe
+var life = new Lifetime();
+life.ownEffect(watcher);
+life.own(() -> connection.close());
+…
+life.release();          // both, once, in reverse
+```
+
+- **Reverse order.** What was built last is undone first, because a handle
+  opened after a connection must close before it.
+- **Once.** `release()` is idempotent; a second pass would undo what is already
+  undone.
+- **Late registration runs at once.** Handing something to an owner that is
+  already over would otherwise be a leak wearing the costume of ownership.
+- **One failure does not strand the rest.**
+
+`mui.App` carries one, so an application rarely constructs its own — see below.
+
 ### There is no `useEffect` here, and that is deliberate
 
 `useEffect` exists because a React component function is re-called with no
@@ -133,7 +157,9 @@ identity of its own, so lifetime has to be attached by a hook. Here a view
 builds a tree of objects and a node's identity is its **place in that tree**, so
 the problem is not the same one. `Effect` covers "re-run when this changes";
 `onCleanup` covers "and undo the last run". Neither is tied to a view's
-lifetime, because the view libraries do not expose one. `pui` takes the opposite
+lifetime — the *application's* life, through `mui.App.lifetime`, but not a
+view's. A view disappearing is observable to Haxe only where Haxe reconciles the
+tree; where the host walks it, as `sui` and `aui` do, nothing tells Haxe. `pui` takes the opposite
 approach to time for the same reason: its `anim.Ticker` is asked for one more
 frame *per frame* and the request clears itself, so a view thrown away by a
 rebuild cannot leave anything running — nothing is ever registered, so nothing
