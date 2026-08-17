@@ -1,7 +1,7 @@
 # rui
 
 **rui** is the fine-grained reactive core shared by the La Pavoiserie UI
-libraries — [`sui`](https://github.com/Pign/sui) (Apple/SwiftUI),
+libraries — [`sui`](https://github.com/lapavoiserie/sui) (Apple/SwiftUI),
 `aui` (Android/Compose), `wui` (Windows/WinUI 3), `cui` (terminal),
 `qui` (Sailfish/Qt-Silica) — and by `mui`, the layer that unifies them.
 
