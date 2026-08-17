@@ -77,11 +77,53 @@ e.dispose();
 - Exceptions thrown inside the function are **caught and traced**, not
   propagated — a failing effect won't take down the write that triggered it, but
   it also won't be loud. Don't rely on an effect to surface errors.
-- `dispose()` unsubscribes from every dependency. An effect you never dispose
-  lives as long as the signals it reads.
+- `dispose()` unsubscribes from every dependency and runs any cleanups (below).
+  An effect you never dispose lives as long as the signals it reads.
 
 Effects nest: an effect created inside another is independent, and the inner one
 tracks its own reads.
+
+### `Effect.onCleanup` — undoing what the effect did
+
+An effect that only reads needs nothing more. An effect that **opens** something
+— a timer, a socket, a subscription to something outside `rui` — has to close
+it, and the moment to close it is before the effect runs again, not only when it
+is disposed:
+
+```haxe
+new Effect(() -> {
+    var timer = new haxe.Timer(interval.value);
+    timer.run = () -> tick.value++;
+    Effect.onCleanup(() -> timer.stop());
+});
+```
+
+Read from inside the effect, so it registers on the effect currently running.
+
+- Cleanups run **before each re-run**, then again on `dispose()`. Without that
+  order, an effect that re-runs on every write stacks one live resource per
+  write — a leak that grows with use instead of showing up once.
+- `dispose()` is **idempotent**: cleanups run once. A second run would be
+  closing a handle already closed, which is quiet until that handle has been
+  reused.
+- You may register **more than one** per run; all of them run, and one that
+  throws does not silence the rest.
+- Calling it **outside an effect throws**. Registering nowhere would mean a
+  resource never released, and silence is the one outcome nobody notices.
+
+A runnable demonstration is in `examples/polling` — a timer re-created when its
+interval changes, where the whole failure mode is visible in the output.
+
+### There is no `useEffect` here, and that is deliberate
+
+`useEffect` exists because a React component function is re-called with no
+identity of its own, so lifetime has to be attached by a hook. Here a view
+builds a tree of objects and a node's identity is its **place in that tree**, so
+the problem is not the same one. `Effect` covers "re-run when this changes";
+`onCleanup` covers "and undo the last run". Neither is tied to a view's
+lifetime, because the view libraries do not expose one — see
+[`pui`'s `Ticker`](https://lapavoiserie.github.io/pui/) for the opposite
+approach to time, where nothing has to be unregistered at all.
 
 ## `Scheduler`
 

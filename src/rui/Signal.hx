@@ -41,9 +41,41 @@ class Effect {
 		return contextStack.length > 0 ? contextStack[contextStack.length - 1] : null;
 
 	var _fn:Void->Void;
-	var _cleanup:Void->Void;
+	var _cleanups:Array<Void->Void> = [];
 	var _dependencies:Array<Signal<Dynamic>> = [];
 	var _isScheduled = false;
+	var _disposed = false;
+
+	/**
+		Undo something this effect did, before it runs again or when it is
+		disposed.
+
+		```haxe
+		new Effect(() -> {
+			var timer = new haxe.Timer(1000);
+			timer.run = () -> tick.value++;
+			Effect.onCleanup(() -> timer.stop());
+		});
+		```
+
+		**Why a call from inside, and not a returned function.** A returned
+		cleanup would mean `Void->Null<Void->Void>`, and every existing caller
+		passes `Void->Void` — including `nui.NodeSink.bindReactive`, which is how
+		three backends bind a property. Haxe would reject all of them. Reading
+		the current effect off the context stack costs nothing and breaks
+		nothing, and it allows more than one cleanup where a return allows one.
+
+		**Outside an effect this throws**, rather than registering nowhere. A
+		cleanup that will never run is a resource that will never be released,
+		and silence is the one outcome that cannot be noticed.
+	**/
+	public static function onCleanup(fn:Void->Void):Void {
+		var effect = current;
+		if (effect == null)
+			throw "rui: Effect.onCleanup was called outside an effect, so nothing would ever run it. "
+				+ "Call it from inside the function given to new Effect(...).";
+		effect._cleanups.push(fn);
+	}
 
 	public function new(fn:Void->Void) {
 		_fn = fn;
@@ -51,7 +83,12 @@ class Effect {
 	}
 
 	public function run() {
+		if (_disposed) return;
 		_isScheduled = false;
+		// Before the new run, not after: what the last run opened is undone
+		// before anything opens it again, so an effect that re-runs on every
+		// keystroke cannot stack a timer per keystroke.
+		runCleanups();
 		cleanupDeps();
 		contextStack.push(this);
 		try {
@@ -82,8 +119,29 @@ class Effect {
 		}
 	}
 
+	/**
+		Stop, and undo.
+
+		Idempotent: disposing twice must not run a cleanup twice, because the
+		second run would be undoing something already undone — closing a handle
+		that has been closed, or worse, one that has been reused.
+	**/
 	public function dispose() {
+		if (_disposed) return;
+		_disposed = true;
+		runCleanups();
 		cleanupDeps();
+	}
+
+	function runCleanups() {
+		if (_cleanups.length == 0) return;
+		// Taken first: a cleanup that registers another must not extend the list
+		// being walked, and one that throws must not keep the rest from running.
+		var pending = _cleanups;
+		_cleanups = [];
+		for (fn in pending) {
+			try fn() catch (e:Dynamic) trace("Error in Effect cleanup: " + e);
+		}
 	}
 }
 

@@ -27,6 +27,12 @@ static server).
 ```haxe
 var count = new Signal(0);
 new Effect(() -> trace("count = " + count.value)); // runs now, and on change
+
+// An effect that opens something closes it, before it re-runs and on dispose:
+// new Effect(() -> {
+//     var timer = new haxe.Timer(interval.value);
+//     Effect.onCleanup(() -> timer.stop());
+// });
 count.value = 1;                                   // re-runs the effect
 ```
 
