@@ -121,9 +121,11 @@ identity of its own, so lifetime has to be attached by a hook. Here a view
 builds a tree of objects and a node's identity is its **place in that tree**, so
 the problem is not the same one. `Effect` covers "re-run when this changes";
 `onCleanup` covers "and undo the last run". Neither is tied to a view's
-lifetime, because the view libraries do not expose one — see
-[`pui`'s `Ticker`](https://lapavoiserie.github.io/pui/) for the opposite
-approach to time, where nothing has to be unregistered at all.
+lifetime, because the view libraries do not expose one. `pui` takes the opposite
+approach to time for the same reason: its `anim.Ticker` is asked for one more
+frame *per frame* and the request clears itself, so a view thrown away by a
+rebuild cannot leave anything running — nothing is ever registered, so nothing
+has to be unregistered.
 
 ## `Scheduler`
 
