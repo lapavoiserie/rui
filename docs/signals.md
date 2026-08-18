@@ -134,7 +134,7 @@ it is over".
 
 ```haxe
 var life = new Lifetime();
-life.ownEffect(watcher);
+life.own(watcher.dispose);
 life.own(() -> connection.close());
 …
 life.release();          // both, once, in reverse

@@ -47,7 +47,7 @@ class LifetimeCheck {
 			runs++;
 			Effect.onCleanup(() -> cleaned++);
 		});
-		owner.ownEffect(effect);
+		owner.own(effect.dispose);
 
 		s.value = 1;
 		check("the effect runs while owned", '$runs/$cleaned', "2/1");

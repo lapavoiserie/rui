@@ -6,14 +6,14 @@ package rui;
 	```haxe
 	var life = new Lifetime();
 	life.own(() -> timer.stop());
-	life.ownEffect(watcher);
+	life.own(watcher.dispose);
 	…
 	life.release();          // both, once, in reverse
 	```
 
 	`Effect.onCleanup` answers "undo what *this effect* did, before it runs
 	again". This answers the other half: "undo everything, because whatever owned
-	it is over". They compose — an effect handed to `ownEffect` is disposed here,
+	it is over". They compose — `own(effect.dispose)` disposes the effect here,
 	which runs its own cleanups.
 
 	## Reverse order
@@ -60,11 +60,6 @@ class Lifetime {
 			return;
 		}
 		_owned.push(undo);
-	}
-
-	/** The common case: an effect whose life is this owner's life. **/
-	public function ownEffect(effect:Signal.Effect):Void {
-		if (effect != null) own(() -> effect.dispose());
 	}
 
 	/**
