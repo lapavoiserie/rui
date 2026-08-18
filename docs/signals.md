@@ -148,7 +148,39 @@ life.release();          // both, once, in reverse
   already over would otherwise be a leak wearing the costume of ownership.
 - **One failure does not strand the rest.**
 
-`mui.App` carries one, so an application rarely constructs its own — see below.
+### `keep` — vivant tant que c'est déclaré
+
+`own` dure jusqu'à `release()`. `keep` dure **tant que `body()` redemande la
+clé** — ce qui est une durée de vie de vue, exprimée du seul côté qui puisse la
+connaître :
+
+```haxe
+override function body():View {
+    if (showDetail) lifetime.keep("detail", () -> {
+        var stop = Watch.changes(net, 1000, onChange);
+        return stop;                      // comment le défaire
+    });
+    …
+}
+```
+
+- **Une clé, pas une vue.** Une reconstruction produit des objets neufs, donc un
+  pointeur ne désigne rien d'une passe à l'autre ; et sous le contrat pull
+  l'hôte étend et jette les vues à son propre rythme sans prévenir Haxe. La clé
+  est la seule identité que l'application est en position d'énoncer, et elle est
+  la même sur les six backends.
+- **« Déclaré », pas « à l'écran ».** Les deux diffèrent, et c'est le point : une
+  vue sortie d'une liste paresseuse au défilement est toujours déclarée, et
+  arrêter son guetteur parce que l'utilisateur a scrollé serait un bug qu'on met
+  des semaines à attribuer. Un `onDisappear` de l'hôte ne sait pas faire cette
+  différence ; `body()` si, parce que déclarer est ce qu'il fait.
+- **Défait une passe plus tard.** Le balayage a lieu au *début* d'une passe, pas
+  à la fin : sous pull, le `body()` d'un composant s'exécute pendant que l'hôte
+  parcourt, donc **après** que celui de l'application a rendu la main. Balayer en
+  fin de passe défairait ce qu'un composant vient de déclarer.
+
+`mui.App` en porte un, donc une application en construit rarement — voir
+ci-dessous.
 
 ### There is no `useEffect` here, and that is deliberate
 
@@ -157,9 +189,10 @@ identity of its own, so lifetime has to be attached by a hook. Here a view
 builds a tree of objects and a node's identity is its **place in that tree**, so
 the problem is not the same one. `Effect` covers "re-run when this changes";
 `onCleanup` covers "and undo the last run". Neither is tied to a view's
-lifetime — the *application's* life, through `mui.App.lifetime`, but not a
-view's. A view disappearing is observable to Haxe only where Haxe reconciles the
-tree; where the host walks it, as `sui` and `aui` do, nothing tells Haxe. `pui` takes the opposite
+lifetime *by the host's reckoning*. What `mui.App.lifetime` offers instead is
+the application's life (`own`) and a **declaration-scoped** one (`keep`) — which
+is what a view's presence means from Haxe's side, and the only one that can be
+told the same way on both rendering families. `pui` takes the opposite
 approach to time for the same reason: its `anim.Ticker` is asked for one more
 frame *per frame* and the request clears itself, so a view thrown away by a
 rebuild cannot leave anything running — nothing is ever registered, so nothing

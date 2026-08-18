@@ -66,6 +66,47 @@ class LifetimeCheck {
 		mixed.release();
 		check("a throwing teardown does not stop the others", after, 1);
 
+		// --- keep(): alive while body() keeps asking --------------------------
+		var log = [];
+		var life = new Lifetime();
+
+		function pass(declare:Bool) {
+			life.beginPass();
+			if (declare) life.keep("watcher", function() {
+				log.push("start");
+				return function() log.push("stop");
+			});
+		}
+
+		pass(true);
+		check("started the first time it is declared", log.join(","), "start");
+
+		pass(true);
+		check("not restarted while it stays declared", log.join(","), "start");
+
+		// The pass that stops asking is the last one it survives: the sweep runs
+		// at the START of a pass, because under pull a component's body() runs
+		// while the host walks — after the app's body() has returned.
+		pass(false);
+		check("still alive during the pass that dropped it", log.join(","), "start");
+		check("and still keyed", life.keeping("watcher"), true);
+
+		pass(false);
+		check("undone at the start of the next pass", log.join(","), "start,stop");
+		check("and no longer keyed", life.keeping("watcher"), false);
+
+		// Declared again: a fresh start, not a resurrection of the old one.
+		pass(true);
+		check("declaring it again starts a new one", log.join(","), "start,stop,start");
+
+		// --- release() takes the kept ones too ---------------------------------
+		life.release();
+		check("release undoes what is still kept", log.join(","), "start,stop,start,stop");
+
+		// --- keeping after release does nothing --------------------------------
+		life.keep("late", function() { log.push("late"); return function() {}; });
+		check("keep after release is ignored", log.join(","), "start,stop,start,stop");
+
 		trace(failures == 0 ? "\nall checks passed" : '\n$failures failed');
 		#if sys
 		Sys.exit(failures == 0 ? 0 : 1);
