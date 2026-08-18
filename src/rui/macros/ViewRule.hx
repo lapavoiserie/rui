@@ -63,21 +63,47 @@ class ViewRule {
 		is about state, not about nodes, and `rui` owns `Observable` and
 		`ImmutableList`, the two things it accepts.
 	**/
-	public static function register(appType:String, viewMethod:String):Void {
+	static var targets:Array<{name:String, pack:String, method:String, rawCells:Bool}> = [];
+
+	/**
+		Register a base class whose subclasses' views the rule judges.
+
+		Call it with the **real** class path — the backend's own `pui.mui.App` —
+		never an alias. `mui.App` is a macro-made alias since the binding
+		inversion, and it fails to resolve from `onAfterTyping`, so a literal
+		pack/name match against it matches nothing: the rule silently stopped
+		checking every mui application, found when a raw-Signal witness that
+		should have failed compiled clean. `mui.macros.Bind` passes the resolved
+		backend base itself; stale `register("mui.App", …)` lines in old build
+		files are harmless — they simply never match.
+
+		May be called several times; each target is checked.
+
+		`rawCells` additionally refuses reading a raw `rui.Signal` or
+		`rui.state.State` in the view. Pass `true` for a portable surface --
+		`mui.macros.Bind` does -- where the application cannot know whether the
+		backend underneath rebuilds from a dirty flag. Leave it off for a
+		backend author's own App: they wire the platform sink themselves, and a
+		raw cell in their hands is the documented idiom.
+	**/
+	public static function register(appType:String, viewMethod:String, rawCells = false):Void {
+		var pack = appType.split(".");
+		var name = pack.pop();
+		targets.push({name: name, pack: pack.join("."), method: viewMethod, rawCells: rawCells});
 		if (registered) return;
 		registered = true;
-
-		var appPack = appType.split(".");
-		var appName = appPack.pop();
-		var appPackPath = appPack.join(".");
 
 		Context.onAfterTyping(function(types:Array<ModuleType>) {
 			for (mt in types) {
 				switch (mt) {
 					case TClassDecl(ref):
 						var cls = ref.get();
-						if (!isApp(cls, appName, appPackPath) || isFramework(cls)) continue;
-						checkView(cls, viewMethod);
+						if (isFramework(cls)) continue;
+						for (t in targets)
+							if (isApp(cls, t.name, t.pack)) {
+								checkView(cls, t.method, t.rawCells);
+								break;
+							}
 					default:
 				}
 			}
@@ -104,7 +130,7 @@ class ViewRule {
 	static function isFramework(cls:ClassType):Bool {
 		var root = cls.pack.length == 0 ? "" : cls.pack[0];
 		return switch (root) {
-			case "rui" | "nui" | "mui" | "wui" | "cui" | "sui" | "aui" | "qui": true;
+			case "rui" | "nui" | "mui" | "wui" | "cui" | "sui" | "aui" | "qui" | "pui" | "kui": true;
 			case _: false;
 		};
 	}
@@ -122,7 +148,7 @@ class ViewRule {
 
 		return switch (root) {
 			// The framework.
-			case "rui" | "nui" | "mui" | "wui" | "cui" | "sui" | "aui" | "qui": true;
+			case "rui" | "nui" | "mui" | "wui" | "cui" | "sui" | "aui" | "qui" | "pui" | "kui": true;
 			// The standard library and the targets. Top-level types -- Array,
 			// String, Math -- have no package at all.
 			case "" | "haxe" | "sys" | "cpp" | "js" | "python" | "neko" | "php" | "lua" | "eval": true;
@@ -130,15 +156,15 @@ class ViewRule {
 		};
 	}
 
-	static function checkView(cls:ClassType, viewMethod:String):Void {
+	static function checkView(cls:ClassType, viewMethod:String, rawCells:Bool):Void {
 		for (field in cls.fields.get()) {
 			if (field.name != viewMethod) continue;
 			var e = field.expr();
-			if (e != null) walk(e, cls);
+			if (e != null) walk(e, cls, rawCells);
 		}
 	}
 
-	static function walk(e:TypedExpr, owner:ClassType):Void {
+	static function walk(e:TypedExpr, owner:ClassType, rawCells:Bool):Void {
 		if (e == null) return;
 
 		// An **action** is not a view.
@@ -163,6 +189,33 @@ class ViewRule {
 			case _:
 		}
 
+		if (rawCells) switch (e.expr) {
+			// A raw reactive cell, read where only a backend's own state counts.
+			//
+			// `rui.Signal` and `rui.state.State` notify their *subscribers* --
+			// and on the backends that rebuild from their own dirty flag (`cui`,
+			// `pui`), nothing subscribes the tree to them. The read compiles,
+			// the value is right, and the screen quietly never updates: paid for
+			// on a device, as an application that answered on stderr and never
+			// redrew. The exact classes only -- their backend subclasses are
+			// what `@:state` produces, and those carry the platform sink.
+			case TField(o, _):
+				switch (haxe.macro.TypeTools.follow(o.t)) {
+					case TInst(c, _) if (c.toString() == "rui.Signal" || c.toString() == "rui.state.State"):
+						var cell = switch (o.expr) {
+							case TLocal(v): v.name;
+							case TField(_, fa): fieldOf(fa) == null ? "it" : fieldOf(fa).name;
+							case _: "it";
+						};
+						Context.error('A view may not read a raw ${c.toString()}.\n'
+							+ '  "$cell" notifies its subscribers, and on backends that rebuild from\n'
+							+ '  their own dirty flag nothing subscribes the tree: the screen would\n'
+							+ '  quietly never update. Declare "$cell" @:state instead.', e.pos);
+					case _:
+				}
+			case _:
+		}
+
 		switch (e.expr) {
 			// A field *read*. A call through a field is code, not state.
 			case TField(_, fa):
@@ -179,7 +232,7 @@ class ViewRule {
 			case _:
 		}
 
-		e.iter(function(sub) walk(sub, owner));
+		e.iter(function(sub) walk(sub, owner, rawCells));
 	}
 
 	static function isVoid(t:Type):Bool {

@@ -20,13 +20,20 @@ cd "$(dirname "$0")/fixtures"
 
 failures=0
 
-# check <fixture> <pass|reject> [field the refusal must name]
+# check <fixture> <pass|reject> [field the refusal must name] [rawcells]
+#
+# The optional 4th argument registers with rawCells=true -- the portable-mui
+# stance `mui.macros.Bind` takes -- where a raw Signal/State read is refused.
+# The default registration is a backend author's, where it is the idiom.
 check() {
-	local fixture="$1" expect="$2" field="${3:-}"
-	local out code
+	local fixture="$1" expect="$2" field="${3:-}" raw="${4:-}"
+	local out code reg
+
+	reg='rui.macros.ViewRule.register("viewrule.App", "body")'
+	[ "$raw" = "rawcells" ] && reg='rui.macros.ViewRule.register("viewrule.App", "body", true)'
 
 	out=$(haxe -cp . -cp ../../../src \
-		--macro 'rui.macros.ViewRule.register("viewrule.App", "body")' \
+		--macro "$reg" \
 		-main "$fixture" -js /dev/null --no-output 2>&1)
 	code=$?
 
@@ -68,6 +75,12 @@ check ActionClosure      pass
 
 # What it refuses.
 check MutableRead        reject count
+
+# A raw reactive cell is refused even though it *is* observable: its writes
+# notify subscribers, and on the backends that rebuild from their own dirty
+# flag nothing subscribes the tree. Only under rawCells -- ObservableState
+# above shows the same read *accepted* under a backend author's registration.
+check RawSignalRead      reject ticks rawcells
 
 # The guard on the point above: a closure that *returns* a view is part of
 # rendering, so it stays judged. Without this case, skipping every closure would
