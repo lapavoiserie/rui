@@ -100,14 +100,19 @@ class Lifetime {
 		bug that takes weeks to attribute. A host's `onDisappear` cannot make that
 		distinction; `body()` can, because declaring is what `body()` does.
 
-		## Released one pass late
+		## Undone as soon as the pass ends
 
-		`beginPass` is what sweeps, so a key dropped during pass *n* is undone at
-		the start of pass *n+1* rather than the instant it disappears. That is
-		deliberate: under the pull contract a component's `body()` runs while the
-		host walks, **after** the application's own `body()` has returned, so a
-		sweep at the end of a pass would undo what a component had just declared.
-		Waiting for the next pass is what makes one rule true on both families.
+		A pass is bracketed: `beginPass` before the tree is built, `endPass` once
+		it is **fully realised** — which is not the same moment as "body() has
+		returned". Under the pull contract a component's `body()` runs lazily
+		while the host walks, so the backend forces that expansion inside the
+		rebuild (`ViewSource.classify`) and closes the pass after it. A sweep
+		before that would undo what a component was about to declare.
+
+		Sweeping at the end rather than at the start of the next pass matters
+		more than it looks: a backend that only rebuilds when something asked it
+		to — `pui` sleeps otherwise — might never run another pass, and a key
+		dropped would then never be undone at all.
 	**/
 	public function keep(key:String, start:Void->(Void->Void)):Void {
 		if (_released) return;
@@ -122,23 +127,32 @@ class Lifetime {
 	}
 
 	/**
-		A new pass over the tree is starting: undo what the last one stopped
-		asking for.
+		A new pass over the tree is starting.
 
-		Called by the backend, once, immediately before the application's `body()`
-		is invoked for a fresh tree. An application never calls it.
+		Called by the backend immediately before the application's `body()` is
+		invoked for a fresh tree. An application never calls it.
 	**/
 	public function beginPass():Void {
+		if (_released) return;
+		for (key in _kept.keys()) _kept.get(key).seen = false;
+	}
+
+	/**
+		The pass is over and the tree is fully realised: undo what it stopped
+		asking for.
+
+		Called by the backend once the whole tree exists — **after** any lazy
+		expansion has been forced, not merely after `body()` returned. Calling it
+		too early undoes what a component was about to declare.
+	**/
+	public function endPass():Void {
 		if (_released) return;
 
 		for (key in _kept.keys()) {
 			var entry = _kept.get(key);
-			if (entry.seen) {
-				entry.seen = false;
-			} else {
-				_kept.remove(key);
-				try entry.undo() catch (e:Dynamic) trace("Error releasing \"" + key + "\": " + e);
-			}
+			if (entry.seen) continue;
+			_kept.remove(key);
+			try entry.undo() catch (e:Dynamic) trace("Error releasing \"" + key + "\": " + e);
 		}
 	}
 

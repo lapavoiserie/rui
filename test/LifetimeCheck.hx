@@ -76,6 +76,7 @@ class LifetimeCheck {
 				log.push("start");
 				return function() log.push("stop");
 			});
+			life.endPass();
 		}
 
 		pass(true);
@@ -87,12 +88,10 @@ class LifetimeCheck {
 		// The pass that stops asking is the last one it survives: the sweep runs
 		// at the START of a pass, because under pull a component's body() runs
 		// while the host walks — after the app's body() has returned.
+		// Undone when the pass that stopped asking closes — not one pass later.
+		// A backend that only rebuilds on demand might never run another pass.
 		pass(false);
-		check("still alive during the pass that dropped it", log.join(","), "start");
-		check("and still keyed", life.keeping("watcher"), true);
-
-		pass(false);
-		check("undone at the start of the next pass", log.join(","), "start,stop");
+		check("undone as soon as that pass ends", log.join(","), "start,stop");
 		check("and no longer keyed", life.keeping("watcher"), false);
 
 		// Declared again: a fresh start, not a resurrection of the old one.
