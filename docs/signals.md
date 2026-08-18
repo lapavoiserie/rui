@@ -148,39 +148,41 @@ life.release();          // both, once, in reverse
   already over would otherwise be a leak wearing the costume of ownership.
 - **One failure does not strand the rest.**
 
-### `keep` — vivant tant que c'est déclaré
+### `keep` — alive while it is declared
 
-`own` dure jusqu'à `release()`. `keep` dure **tant que `body()` redemande la
-clé** — ce qui est une durée de vie de vue, exprimée du seul côté qui puisse la
-connaître :
+`own` lasts until `release()`. `keep` lasts **as long as `body()` keeps asking
+for the key** — a view lifetime, expressed by the only side that can know it:
 
 ```haxe
 override function body():View {
     if (showDetail) lifetime.keep("detail", () -> {
         var stop = Watch.changes(net, 1000, onChange);
-        return stop;                      // comment le défaire
+        return stop;                      // how to undo it
     });
     …
 }
 ```
 
-- **Une clé, pas une vue.** Une reconstruction produit des objets neufs, donc un
-  pointeur ne désigne rien d'une passe à l'autre ; et sous le contrat pull
-  l'hôte étend et jette les vues à son propre rythme sans prévenir Haxe. La clé
-  est la seule identité que l'application est en position d'énoncer, et elle est
-  la même sur les six backends.
-- **« Déclaré », pas « à l'écran ».** Les deux diffèrent, et c'est le point : une
-  vue sortie d'une liste paresseuse au défilement est toujours déclarée, et
-  arrêter son guetteur parce que l'utilisateur a scrollé serait un bug qu'on met
-  des semaines à attribuer. Un `onDisappear` de l'hôte ne sait pas faire cette
-  différence ; `body()` si, parce que déclarer est ce qu'il fait.
-- **Défait une passe plus tard.** Le balayage a lieu au *début* d'une passe, pas
-  à la fin : sous pull, le `body()` d'un composant s'exécute pendant que l'hôte
-  parcourt, donc **après** que celui de l'application a rendu la main. Balayer en
-  fin de passe défairait ce qu'un composant vient de déclarer.
+- **A key, not a view.** A rebuild produces fresh objects, so a pointer means
+  nothing from one pass to the next; and under the pull contract the host
+  expands and discards views on its own schedule without telling Haxe. The key
+  is the one identity the application is in a position to state, and it reads
+  the same on all six backends.
+- **"Declared", not "on screen".** The two differ, and the difference is the
+  point: a view scrolled out of a lazy list is still declared, and stopping its
+  watcher because the user scrolled would be a bug that takes weeks to
+  attribute. A host's `onDisappear` cannot tell them apart; `body()` can,
+  because declaring is what `body()` does.
+- **Undone when the pass ends.** A pass is bracketed — `beginPass` before the
+  tree is built, `endPass` once it is *fully realised*, which is not the same
+  moment as "`body()` returned": under the pull contract a component's `body()`
+  runs lazily while the host walks, so the backend closes the pass after that
+  expansion is forced. Sweeping at the end rather than at the start of the next
+  pass matters more than it looks — a backend that only rebuilds on demand
+  might never run another pass, and a dropped key would then never be undone.
+  Found by running the example on `pui`, which sleeps between frames.
 
-`mui.App` en porte un, donc une application en construit rarement — voir
-ci-dessous.
+`mui.App` carries one, so an application rarely constructs its own — see below.
 
 ### There is no `useEffect` here, and that is deliberate
 
