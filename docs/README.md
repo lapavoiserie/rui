@@ -19,6 +19,29 @@ count.value = 1;                                   // prints 1
 count.value = 1;                                   // prints nothing: unchanged
 ```
 
+## Who this is for
+
+**rui is the layer under the layer.** It is written for two audiences, and the
+second one is much larger than it looks:
+
+- **Backend and capability authors** — someone building or maintaining a
+  renderer (`cui`, `pui`, `sui`, …) or a native capability (`kui`) wires
+  `Signal`, `Effect`, platform sinks and `Lifetime` passes directly. Everything
+  in these pages is theirs.
+- **Application authors** — someone building an app on
+  [`mui`](https://lapavoiserie.github.io/mui/) needs **four concepts**, none of
+  which require reading this documentation: `@:state` fields, `body()`,
+  `lifetime.own`/`lifetime.keep`, and `kui.Kui.get`. The reactive machinery
+  described here runs underneath, but the application never constructs a
+  `Signal` or an `Effect` itself — the view rule will refuse a raw cell read in
+  a view precisely because the backend's own `@:state` is what carries the
+  platform half.
+
+If you arrived here from an application and are wondering which class to
+instantiate: none. Declare the field `@:state` and write `body()`; start
+anything long-lived under `lifetime`, and it is undone when the application is
+over.
+
 ## What's in it
 
 | | |
