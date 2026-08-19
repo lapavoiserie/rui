@@ -20,20 +20,25 @@ cd "$(dirname "$0")/fixtures"
 
 failures=0
 
-# check <fixture> <pass|reject> [field the refusal must name] [rawcells]
+# check <fixture> <pass|reject> [field the refusal must name] [rawcells|meta]
 #
 # The optional 4th argument registers with rawCells=true -- the portable-mui
 # stance `mui.macros.Bind` takes -- where a raw Signal/State read is refused.
 # The default registration is a backend author's, where it is the idiom.
+# "meta" registers the "body" target AND a metadata target on the same base,
+# the way Bind registers both -- which also pins the fix for the loop that
+# used to stop at the first matching target.
 check() {
 	local fixture="$1" expect="$2" field="${3:-}" raw="${4:-}"
-	local out code reg
+	local out code reg reg2
 
 	reg='rui.macros.ViewRule.register("viewrule.App", "body")'
+	reg2=''
 	[ "$raw" = "rawcells" ] && reg='rui.macros.ViewRule.register("viewrule.App", "body", true)'
+	[ "$raw" = "meta" ] && reg2='--macro rui.macros.ViewRule.registerMeta("viewrule.App",":probe")'
 
 	out=$(haxe -cp . -cp ../../../src \
-		--macro "$reg" \
+		--macro "$reg" $reg2 \
 		-main "$fixture" -js /dev/null --no-output 2>&1)
 	code=$?
 
@@ -86,6 +91,12 @@ check RawSignalRead      reject ticks rawcells
 # rendering, so it stays judged. Without this case, skipping every closure would
 # pass unnoticed.
 check BuilderClosure     reject hidden
+
+# The metadata target: any method carrying the registered metadata is judged
+# like body(). MetaMutableRead's body() is clean on purpose -- only the second
+# target can refuse it, which is the regression for the old first-match break.
+check MetaFinalRead      pass   ""    meta
+check MetaMutableRead    reject gauge meta
 
 if [ $failures -eq 0 ]; then
 	echo ""

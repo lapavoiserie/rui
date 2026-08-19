@@ -63,7 +63,7 @@ class ViewRule {
 		is about state, not about nodes, and `rui` owns `Observable` and
 		`ImmutableList`, the two things it accepts.
 	**/
-	static var targets:Array<{name:String, pack:String, method:String, rawCells:Bool}> = [];
+	static var targets:Array<{name:String, pack:String, method:Null<String>, meta:Null<String>, rawCells:Bool}> = [];
 
 	/**
 		Register a base class whose subclasses' views the rule judges.
@@ -89,7 +89,28 @@ class ViewRule {
 	public static function register(appType:String, viewMethod:String, rawCells = false):Void {
 		var pack = appType.split(".");
 		var name = pack.pop();
-		targets.push({name: name, pack: pack.join("."), method: viewMethod, rawCells: rawCells});
+		targets.push({name: name, pack: pack.join("."), method: viewMethod, meta: null, rawCells: rawCells});
+		hook();
+	}
+
+	/**
+		Like `register`, but judging every method that carries a piece of
+		metadata instead of one named method.
+
+		This exists for declaration sugar whose methods have no fixed names —
+		`mui`'s `@:surface(Role)` marks any method as a surface's content, and
+		each of those runs inside its surface's effect exactly as `body()` runs
+		inside the tree's. A name list cannot name them; the metadata already
+		does. `metaName` is the compiler's form, colon included: `":surface"`.
+	**/
+	public static function registerMeta(appType:String, metaName:String, rawCells = false):Void {
+		var pack = appType.split(".");
+		var name = pack.pop();
+		targets.push({name: name, pack: pack.join("."), method: null, meta: metaName, rawCells: rawCells});
+		hook();
+	}
+
+	static function hook():Void {
 		if (registered) return;
 		registered = true;
 
@@ -99,10 +120,14 @@ class ViewRule {
 					case TClassDecl(ref):
 						var cls = ref.get();
 						if (isFramework(cls)) continue;
+						// Every matching target, not the first: the same base
+						// is registered once for "body" and once for the
+						// surface metadata, and a `break` here silently
+						// retired whichever came second.
 						for (t in targets)
 							if (isApp(cls, t.name, t.pack)) {
-								checkView(cls, t.method, t.rawCells);
-								break;
+								if (t.method != null) checkView(cls, t.method, t.rawCells);
+								if (t.meta != null) checkMeta(cls, t.meta, t.rawCells);
 							}
 					default:
 				}
@@ -159,6 +184,14 @@ class ViewRule {
 	static function checkView(cls:ClassType, viewMethod:String, rawCells:Bool):Void {
 		for (field in cls.fields.get()) {
 			if (field.name != viewMethod) continue;
+			var e = field.expr();
+			if (e != null) walk(e, cls, rawCells);
+		}
+	}
+
+	static function checkMeta(cls:ClassType, metaName:String, rawCells:Bool):Void {
+		for (field in cls.fields.get()) {
+			if (!field.meta.has(metaName)) continue;
 			var e = field.expr();
 			if (e != null) walk(e, cls, rawCells);
 		}
