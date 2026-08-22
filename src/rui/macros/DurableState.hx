@@ -70,10 +70,15 @@ class DurableState {
 		runtime — a cell that silently stopped persisting on one platform is
 		exactly the kind of quiet that costs a user their data.
 
-		`meta` is the `@:state` entry itself, which the caller has in hand: three
-		backends strip it from the field before this could find it again.
+		`meta` is the `@:state` entry itself and `type` the field's **declared**
+		type, both passed rather than read back off the field. Three backends
+		strip the metadata and every one of them replaces the type with
+		`State<T>` — pui and qui do it before this could look — so a helper that
+		went digging would be right in three macros and wrong in three others,
+		depending on where in each it happened to be called. Handing it what the
+		caller already holds makes the call order stop mattering.
 	**/
-	public static function requestOf(field:Field, meta:MetadataEntry):Null<DurableRequest> {
+	public static function requestOf(field:Field, meta:MetadataEntry, type:Null<ComplexType>):Null<DurableRequest> {
 		if (meta.params == null || meta.params.length == 0)
 			return null;
 
@@ -95,7 +100,7 @@ class DurableState {
 			return null;
 		}
 
-		var kind = kindOf(field);
+		var kind = kindOf(field, type);
 		if (kind == null)
 			return null; // kindOf has already reported it
 
@@ -143,12 +148,7 @@ class DurableState {
 
 	// -- refusals -----------------------------------------------------------
 
-	static function kindOf(field:Field):Null<String> {
-		var type = switch (field.kind) {
-			case FVar(t, _): t;
-			case FProp(_, _, t, _): t;
-			case _: null;
-		}
+	static function kindOf(field:Field, type:Null<ComplexType>):Null<String> {
 		var name = switch (type) {
 			case TPath({pack: [], name: n}): n;
 			case _: null;
