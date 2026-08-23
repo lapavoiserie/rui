@@ -5,9 +5,86 @@ import rui.Observable;
 import js.Browser;
 #end
 
+/**
+	When effects run.
+
+	Every target but JS runs them **synchronously**: `schedule` flushes on the
+	spot, so a write re-runs what reads it before `set` returns. That is a
+	contract, checked by `test/StateCheck.hx`, and several backends depend on
+	it — a terminal app has no event loop to hand the work to, and a Sailfish
+	process reaches Haxe from a Qt callback that will not come back.
+
+	## Why a batch exists anyway
+
+	Synchronous is right for *one* write and wasteful for several. A button
+	handler that writes three cells re-runs everything reading them three
+	times, and the last two pictures are the only ones anybody sees. On a
+	surface that publishes rather than draws — a widget, a companion on
+	another machine — the intermediate pictures are not merely wasted work,
+	they are a reload budget spent on frames nobody asked for.
+
+	`batch` is a scope where scheduling accumulates instead of running:
+
+	```haxe
+	Scheduler.batch(() -> {
+		first.set(1);
+		second.set(2);   // an effect reading both runs once, below
+	});
+	```
+
+	Effects deduplicate themselves (`Effect.schedule` refuses to queue twice),
+	so the effect runs once no matter how many of its cells moved.
+
+	## What batching deliberately does not touch
+
+	**State sinks.** `rui.state.State.set` calls the platform sink and the
+	durable sink directly, not through here, so a batch never delays the
+	screen or the store — only the effects. That is what makes this scope
+	cheap to adopt: on four of six backends nothing about drawing goes
+	through the scheduler at all.
+
+	**Anything outside a scope.** A write with no batch around it behaves
+	exactly as before. Batching is opt-in per call site, and the call sites
+	that want it are the ones that dispatch an action — where "several writes,
+	one gesture" is the shape by construction.
+**/
 class Scheduler {
 	static var tasks:Array<Void->Void> = [];
 	static var pending = false;
+
+	/** How many batches are open. Only leaving the outermost one flushes. **/
+	static var depth = 0;
+
+	/**
+		Run `body`, holding back every effect it schedules until it returns.
+
+		Nests: an inner batch inside an outer one adds to the same queue, and
+		the outer one is what flushes. That matters because a call site cannot
+		know whether it is already inside somebody else's gesture.
+
+		**An exception does not swallow the effects.** The writes that happened
+		before it happened, and effects that do not run leave the screen
+		showing state nobody holds. So the queue is flushed on the way out and
+		the exception continues.
+	**/
+	public static function batch(body:Void->Void):Void {
+		depth++;
+		try {
+			body();
+		} catch (e:Dynamic) {
+			depth--;
+			drain();
+			throw e;
+		}
+		depth--;
+		drain();
+	}
+
+	/** Whether a batch is open, for code that must know it is coalescing. **/
+	public static var batching(get, never):Bool;
+
+	static function get_batching():Bool
+		return depth > 0;
 
 	public static function schedule(task:Void->Void) {
 		tasks.push(task);
@@ -17,9 +94,25 @@ class Scheduler {
 			Browser.window.requestAnimationFrame(flush);
 			#else
 			// Synchronous execution for TUI to avoid blocking issues with MainLoop/Timer vs Sys.getChar
-			flush(0);
+			if (depth == 0)
+				flush(0);
 			#end
 		}
+	}
+
+	/**
+		Leaving the outermost batch.
+
+		Nothing on JS: a frame was already requested when the first task was
+		scheduled, and `requestAnimationFrame` is that target's own batch —
+		forcing a flush here would make effects run *earlier* on JS than they
+		do today, which is not what this scope is for.
+	**/
+	static function drain() {
+		#if !js
+		if (depth == 0 && pending)
+			flush(0);
+		#end
 	}
 
 	static function flush(_) {

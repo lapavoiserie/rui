@@ -202,13 +202,13 @@ has to be unregistered.
 
 ## `Scheduler`
 
-Batches effect re-runs so one write doesn't re-run the same effect twice.
+Decides *when* an effect re-runs. Two regimes, and the first is the default.
+
+### Outside a batch: synchronous
 
 ```haxe
-Scheduler.schedule(fn);   // queue; effects call this for you via Effect.schedule()
+count.set(1);   // an effect reading `count` has already re-run here
 ```
-
-The flush strategy is per target:
 
 | Target | Flush |
 |---|---|
@@ -216,11 +216,56 @@ The flush strategy is per target:
 | everything else | **synchronous** |
 
 The synchronous flush is inherited from the terminal target, where deferring
-through `MainLoop`/`Timer` conflicts with blocking reads such as
-`Sys.getChar`. It suits imperative targets, which patch native widgets directly.
-Consider it before driving a target that can re-enter from a native callback:
-under a synchronous flush, a write made *inside* an effect flushes within that
-same effect's run.
+through `MainLoop`/`Timer` conflicts with blocking reads such as `Sys.getChar`,
+and it suits imperative targets, which patch native widgets directly. It is a
+contract, checked by `test/StateCheck.hx`, and worth knowing before driving a
+target that can re-enter from a native callback: a write made *inside* an
+effect flushes within that same effect's run.
+
+### Inside a batch: one gesture, one run
+
+Synchronous is right for one write and wasteful for several. A handler that
+writes three cells re-runs everything reading them three times, and only the
+last picture is ever seen.
+
+```haxe
+Scheduler.batch(() -> {
+    first.set(1);
+    second.set(2);   // an effect reading both runs once, on the way out
+});
+```
+
+- **Effects deduplicate.** `Effect.schedule` refuses to queue itself twice, so
+  the effect runs once however many of its cells moved.
+- **Batches nest**, and the outermost one flushes. A call site cannot know
+  whether it is already inside somebody else's gesture.
+- **An exception does not strand the queue.** The writes before it happened;
+  effects run on the way out and the exception continues.
+- **Nothing on JS changes.** A frame was already requested; forcing a flush at
+  the end of the scope would make effects run *earlier* there than they do
+  today, which is not what the scope is for.
+
+`Scheduler.batching` says whether one is open.
+
+### What a batch never delays
+
+**State sinks.** `rui.state.State.set` calls the platform sink and the durable
+store directly, not through the scheduler, so a screen mirrored by a sink
+updates on the write whatever scope surrounds it. That is what makes batching
+cheap to adopt: on four of the six platform libraries, drawing never goes
+through an effect at all.
+
+Every one of them opens a batch where a host event arrives — `invokeAction` in
+the `nui` contract, `Bridge.emit` on Sailfish, `Actions.run` on WinUI — so an
+application writing several cells from one button gets one render without
+asking for it. A batch is opt-in per call site, and those call sites are the
+ones where "several writes, one gesture" is the shape by construction.
+
+Verified by `test/BatchCheck.hx`:
+
+```
+haxe -cp src -cp test -main BatchCheck --interp
+```
 
 ## Fine-grained by construction
 
