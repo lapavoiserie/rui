@@ -322,6 +322,11 @@ class ViewRule {
 
 	static function acceptable(cf:ClassField):Bool {
 		if (cf.isFinal) return true;
+		// A `@:state` field is a property now -- typed `Int`, not `State<Int>` --
+		// and its getter is what subscribes. The type cannot say so; the macro
+		// that generated it does, with `@:stateProperty`. See
+		// `rui.macros.StateProperty`.
+		if (cf.meta.has(":stateProperty")) return true;
 
 		return switch (cf.type.follow()) {
 			case TInst(ref, _): isReactive(ref.get());

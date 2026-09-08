@@ -105,6 +105,37 @@ run a closure — and costs one integer read when nothing changed. A background
 thread rewriting cells under a running effect is a different and much worse
 problem.
 
+## The `@:state` property
+
+An application rarely holds a `State` by hand. It declares a field, and the
+backend's macro builds the cell:
+
+```haxe
+@:state var count:Int = 0;
+
+count += 1;                 // writes the cell, which notifies
+new Text('$count');         // reads the cell, which subscribes
+Toggle("dark", dark_);      // the cell itself, for a control that binds
+count_.peek();              // an untracked read, said out loud
+```
+
+The field becomes two: the **cell** — the backend's `State<T>` — under the
+field's name with a trailing underscore, and a **property** under the field's
+own name that forwards to it. `get_count()` is `count_.get()`, so a read still
+subscribes; `set_count(v)` is `count_.set(v)`, so a write still notifies, still
+reaches the platform sink, still reaches the durable one. Nothing about *when*
+anything happens moved; only the spelling did.
+
+The trailing underscore is the convention for "the cell of": Swift writes
+`$dark` for the same thing, and Haxe has no `$` in an identifier. A control
+that binds, a durable store, an untracked read — anything that needs the cell
+rather than its value — takes `dark_`.
+
+The split lives in `rui.macros.StateProperty`, shared by the six backend
+macros the way `DurableState` beside it is. The property carries
+`@:stateProperty`, which is how `rui.macros.ViewRule` knows that a read
+of a plain-looking `Int` field is a subscribing read and accepts it.
+
 ## What is deliberately absent
 
 No `setTo`, no `inc`/`dec`/`toggle`, no typed `IntState`/`BoolState` subclasses.
