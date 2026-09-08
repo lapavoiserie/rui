@@ -40,6 +40,10 @@ class State<T> {
 	var _durable:Null<T->Void>;
 	var _foreign:Bool = false;
 
+	// The share hook: asked BEFORE the signal moves, because a write on a
+	// cell another party owns must not land here at all -- see `set`.
+	var _share:Null<T->Bool>;
+
 	/** Optional identifier. Some backends key their platform bridge on it. **/
 	public var name(get, never):String;
 
@@ -78,9 +82,16 @@ class State<T> {
 		The durable write comes *before* the platform sink so that a sink which
 		synchronously re-samples a detached surface — a widget publishing a new
 		picture — publishes one the store already agrees with.
+
+		The share hook comes before everything, including the signal: a
+		shared cell another party owns is not written here — the value
+		travels to its owner as an intent and comes back as the owner's
+		write. So when the hook answers `true`, this `set` did nothing.
 	**/
 	public function set(v:T):Void {
 		if (_sig.peek() == v)
+			return;
+		if (_share != null && !_foreign && _share(v))
 			return;
 		_sig.value = v;
 		if (_durable != null && !_foreign)
@@ -137,11 +148,23 @@ class State<T> {
 		_durable = sink;
 	}
 
-	/** Drop the signal's subscribers and both sinks. **/
+	/**
+		Register the share hook — a **third** slot, and not a sink: it runs
+		before the signal moves and may consume the write. Installed by
+		`rui.state.Shared.bind`, not by an application. The hook returns
+		`true` when the write was carried to its owner and must not land
+		here, `false` to let it land (an owned cell, stamped and replicated).
+	**/
+	public function setShareHook(hook:Null<T->Bool>):Void {
+		_share = hook;
+	}
+
+	/** Drop the signal's subscribers, both sinks and the share hook. **/
 	public function dispose():Void {
 		_sig.dispose();
 		_sink = null;
 		_durable = null;
+		_share = null;
 	}
 
 	public function toString():String

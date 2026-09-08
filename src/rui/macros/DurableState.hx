@@ -4,7 +4,7 @@ package rui.macros;
 import haxe.macro.Context;
 import haxe.macro.Expr;
 
-/** What one `@:state(durable)` field asked for. **/
+/** What one `@:state(durable)` / `@:state(shared(Party))` field asked for. **/
 typedef DurableRequest = {
 	/** The store key. The field's own name, prefixed by its class, unless
 		`key = "..."` named one. **/
@@ -12,6 +12,13 @@ typedef DurableRequest = {
 
 	/** The `rui.state.Durable.DurableKind` constructor, by name. **/
 	var kind:String;
+
+	/** Whether the cell is backed by the device store. **/
+	var durable:Bool;
+
+	/** The party that owns the cell, when it is shared; `null` otherwise.
+		The wire identifies the cell by the field's own name. **/
+	var shared:Null<String>;
 }
 #end
 
@@ -27,7 +34,14 @@ typedef DurableRequest = {
 	```haxe
 	@:state(durable) var count:Int = 0;
 	@:state(durable, key = "score") var count:Int = 0;
+	@:state(shared(Watch)) var steps:Int = 0;          // one owner per cell
+	@:state(shared(Phone), durable) var goal:Int = 0;  // both: the owner keeps it
 	```
+
+	`shared(Party)` rides the same request, so the six macros that already
+	emit `hydrate` and `bindCall` for `durable` get sharing without a line
+	changed: the bind statement carries both binds when both were asked.
+	The rule behind a shared cell is `rui.state.Shared`.
 
 	## Why this is in `rui` and names neither `mui` nor `kui`
 
@@ -83,36 +97,47 @@ class DurableState {
 			return null;
 
 		var durable = false;
+		var shared:Null<String> = null;
 		var key:Null<String> = null;
 		for (p in meta.params) {
 			switch (p.expr) {
 				case EConst(CIdent("durable")):
 					durable = true;
+				case ECall({expr: EConst(CIdent("shared"))}, [{expr: EConst(CIdent(party))}]):
+					shared = party;
+				case ECall({expr: EConst(CIdent("shared"))}, _):
+					Context.error("@:state(shared(Party)) names ONE party, the cell's owner — an identifier, like `Phone`.", p.pos);
 				case EBinop(OpAssign, {expr: EConst(CIdent("key"))}, {expr: EConst(CString(k, _))}):
 					key = k;
 				case _:
-					Context.error("@:state takes `durable`, and optionally `key = \"...\"` — nothing else.", p.pos);
+					Context.error("@:state takes `durable`, `shared(Party)`, and optionally `key = \"...\"` — nothing else.", p.pos);
 			}
 		}
-		if (!durable) {
+		if (!durable && shared == null) {
 			if (key != null)
 				Context.error("@:state(key = \"...\") only means something with `durable`.", meta.pos);
 			return null;
 		}
 
-		var kind = kindOf(field, type);
+		var kind = kindOf(field, type, durable ? "durable" : "shared(" + shared + ")");
 		if (kind == null)
 			return null; // kindOf has already reported it
 
-		requireStore(field);
+		if (durable)
+			requireStore(field);
+		if (shared != null)
+			requireCarry(field, shared);
 
 		var owner = Context.getLocalClass();
 		var prefix = owner == null ? "" : owner.get().name + ".";
-		return {key: key != null ? key : prefix + field.name, kind: kind};
+		return {key: key != null ? key : prefix + field.name, kind: kind, durable: durable, shared: shared};
 	}
 
-	/** The default expression, replaced by "what the store holds, or this". **/
+	/** The default expression, replaced by "what the store holds, or this"
+		— for a durable cell; a merely shared one is born from its default. **/
 	public static function hydrate(req:DurableRequest, defaultExpr:Expr):Expr {
+		if (!req.durable)
+			return defaultExpr;
 		var kind = kindExpr(req.kind, defaultExpr.pos);
 		return macro rui.state.Durable.initial($v{req.key}, $kind, $defaultExpr);
 	}
@@ -127,7 +152,19 @@ class DurableState {
 	public static function bindCall(req:DurableRequest, owner:Expr, fieldName:String, pos:Position):Expr {
 		var kind = kindExpr(req.kind, pos);
 		var cell = {expr: EField(owner, fieldName), pos: pos};
-		return macro rui.state.Durable.bind($cell, $v{req.key}, $kind);
+		var binds:Array<Expr> = [];
+		if (req.durable)
+			binds.push(macro rui.state.Durable.bind($cell, $v{req.key}, $kind));
+		if (req.shared != null) {
+			// Identified by the field's own name on the wire: both ends
+			// compile the same class, and the class prefix would only say
+			// what they both already know.
+			var wireName = fieldName;
+			if (StringTools.endsWith(wireName, "_"))
+				wireName = wireName.substr(0, wireName.length - 1);
+			binds.push(macro rui.state.Shared.bind($cell, $v{wireName}, $kind, $v{req.shared}));
+		}
+		return binds.length == 1 ? binds[0] : macro $b{binds};
 	}
 
 	/**
@@ -148,7 +185,7 @@ class DurableState {
 
 	// -- refusals -----------------------------------------------------------
 
-	static function kindOf(field:Field, type:Null<ComplexType>):Null<String> {
+	static function kindOf(field:Field, type:Null<ComplexType>, asked:String):Null<String> {
 		var name = switch (type) {
 			case TPath({pack: [], name: n}): n;
 			case _: null;
@@ -159,13 +196,27 @@ class DurableState {
 			case "Bool": "KBool";
 			case "String": "KString";
 			case _:
-				Context.error('@:state(durable) carries Int, Float, Bool or String, and "${field.name}" is '
+				Context.error('@:state($asked) carries Int, Float, Bool or String, and "${field.name}" is '
 					+ (name == null ? "none of them" : name) + ".\n"
 					+ "  A reference type mutated in place compares equal to itself, so its write never\n"
-					+ "  reaches the store, and what a detached surface shows goes quietly stale.\n"
-					+ "  Persist what you can name.", field.pos);
+					+ "  reaches the store or the wire, and what the other side shows goes quietly stale.\n"
+					+ "  Carry what you can name.", field.pos);
 				null;
 		}
+	}
+
+	/**
+		A shared cell leaves the device, which is the concern `-D mui_carry`
+		gates for a Companion surface — the same concern, so the same word.
+		`mui_cafos` is the older spelling and still opens the gate.
+	**/
+	static function requireCarry(field:Field, party:String):Void {
+		if (Context.defined("mui_carry") || Context.defined("mui_cafos"))
+			return;
+		Context.error('@:state(shared($party)) sends "${field.name}" off this device — to a machine on the network,\n'
+			+ "  or to a paired wearable — and that is off in this build.\n"
+			+ "  Turn it on with -D mui_carry (plus dui and a transport), or drop `shared` and keep the cell here.\n"
+			+ "  Refused rather than ignored: a cell that silently stopped crossing is a device that lies.", field.pos);
 	}
 
 	static function requireStore(field:Field):Void {

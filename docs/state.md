@@ -136,6 +136,36 @@ macros the way `DurableState` beside it is. The property carries
 `@:stateProperty`, which is how `rui.macros.ViewRule` knows that a read
 of a plain-looking `Int` field is a subscribing read and accepts it.
 
+## Shared cells: one owner each
+
+A cell may also be **shared** with another device running the same
+application — a phone and its watch, a Mac and a tablet — under one rule:
+every shared cell has exactly one owner, and only the owner writes it.
+
+```haxe
+@:state(shared(Phone)) var goal:Int = 10000;   // the phone writes it; a watch write is an intent
+@:state(shared(Watch)) var steps:Int = 0;      // the watch owns it; the phone reads it
+```
+
+The rule lives in `rui.state.Shared`, and it rests on a third slot on the
+cell, `setShareHook`, which is **not a sink**: it runs *before* the signal
+moves and may consume the write. On an owned cell the hook stamps the value
+`(incarnation, sequence)`, carries it, and lets the write land. On a cell
+another party owns it carries the value as an intent and the local cell
+does not move — a peer never shows a value the owner did not stamp. What
+arrives from the owner is applied through `applyForeign`, like a durable
+value from another process: the platform mirror updates, nothing is written
+back.
+
+`rui` knows the rule and not the wire: `Shared` speaks to a `SharedCarrier`,
+and `dui.state.Share` is one. The four kinds are `Durable`'s, packed by the
+same codec, and the refusals are the same discipline — a foreign write with
+no owner reachable, a frame for an unknown cell or the wrong kind, all say
+so through `Shared.onRefused` rather than queue or guess.
+
+Verified by `test/SharedCheck.hx`; the wire by `dui/test/Check.hx`; the
+design by `dui`'s [owned state](https://lapavoiserie.github.io/dui/#/owned-state).
+
 ## What is deliberately absent
 
 No `setTo`, no `inc`/`dec`/`toggle`, no typed `IntState`/`BoolState` subclasses.
@@ -154,6 +184,7 @@ libraries. The shared core carries only what they agree on.
 | `applyExternal(v:T)` | platform write: effects only |
 | `applyForeign(v:T)` | write from another process: effects **and** sink, no write back |
 | `setDurableSink(sink:Null<T->Void>)` | the store's slot, separate from the platform sink |
+| `setShareHook(hook:Null<T->Bool>)` | asked before the signal moves; `true` consumes the write (a foreign shared cell) |
 | `setPlatformSink(sink:Null<T->Void>)` | register the sink; `null` detaches |
 | `name:String` | `""` when unnamed |
 | `dispose()` | drop subscribers and sink |

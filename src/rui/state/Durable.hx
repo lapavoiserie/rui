@@ -170,12 +170,14 @@ class Durable {
 
 	// -- the codec ---------------------------------------------------------
 	//
-	// One place, rather than one per native implementation. A float is
+	// One place, rather than one per native implementation -- and public,
+	// because a shared cell (rui.state.Shared) crosses a network in exactly
+	// this shape: the four kinds that survive every boundary here. A float is
 	// formatted through Std.string, which is POSIX on every target this
 	// ships to; a locale that writes "1,5" would round-trip to nothing, and
 	// that is worth saying out loud rather than discovering on a phone.
 
-	static function encode(v:Dynamic, kind:DurableKind):Null<String> {
+	public static function encode(v:Dynamic, kind:DurableKind):Null<String> {
 		if (v == null) return null;
 		return switch (kind) {
 			case KInt: "i:" + Std.string(v);
@@ -191,7 +193,7 @@ class Durable {
 		caller falls back to the default rather than throwing: in a widget
 		extension a crash is a blank rectangle nobody can debug.
 	**/
-	static function decode(packed:String, kind:DurableKind):Null<Dynamic> {
+	public static function decode(packed:String, kind:DurableKind):Null<Dynamic> {
 		if (packed == null || packed.length < 2 || packed.charAt(1) != ":") return null;
 		if (packed.charAt(0) != (kind : String)) return null;
 		var body = packed.substr(2);
