@@ -209,6 +209,28 @@ class Shared {
 		return out;
 	}
 
+	/**
+		Every party this application knows of but is not: the owners of its
+		shared cells and of its intents.
+
+		The wire needs this to pair per party, and the application should not
+		have to say twice what its own declarations already say. Note it is a
+		plain array rather than observable state: cells are bound as an
+		application is constructed, before anything joins a wire, so nothing
+		reads this while it can still change.
+	**/
+	public function parties():Array<String> {
+		var out:Array<String> = [];
+		for (rec in cells)
+			if (!owns(rec.owner) && out.indexOf(rec.owner) < 0)
+				out.push(rec.owner);
+		for (d in intents)
+			if (!owns(d.owner) && out.indexOf(d.owner) < 0)
+				out.push(d.owner);
+		out.sort(Reflect.compare);
+		return out;
+	}
+
 	/** The stamp this party holds for a cell, `(0, 0)` when it has never
 		seen one. **/
 	public function stampOf(key:String):{i:Int, s:Int} {
