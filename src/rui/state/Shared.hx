@@ -168,16 +168,39 @@ class Shared {
 
 	// -- what crosses ------------------------------------------------------
 
-	/** Every cell this party owns, stamped and packed — what a sync carries.
-		A cell never written in this life is stamped `(incarnation, 0)`: newer
-		than any previous life, older than any write in this one. **/
+	/** Every cell this party owns, stamped and packed. A cell never written
+		in this life is stamped `(incarnation, 0)`: newer than any previous
+		life, older than any write in this one. **/
 	public function owned():Array<StampedCell> {
+		return gather(true);
+	}
+
+	/**
+		Every cell this party **holds** — its own, and the ones it has heard
+		from their owners — each carrying the stamp of its real owner. What a
+		sync carries.
+
+		Owned is not enough the moment a device relays. A tablet that joins
+		through a phone would learn the phone's cells and never the watch's:
+		the phone holds the watch's steps, stamped by the watch, and passing
+		them on loses nothing about who wrote what. A cell whose owner has
+		never been heard from is left out — `(0, 0)` would be refused by
+		everyone anyway, and saying nothing is cheaper than saying nothing
+		loudly.
+	**/
+	public function held():Array<StampedCell> {
+		return gather(false);
+	}
+
+	function gather(mineOnly:Bool):Array<StampedCell> {
 		var out:Array<StampedCell> = [];
 		for (rec in cells) {
-			if (!owns(rec.owner))
+			if (owns(rec.owner)) {
+				if (rec.i == 0)
+					rec.i = incarnation;
+			} else if (mineOnly || rec.i == 0) {
 				continue;
-			if (rec.i == 0)
-				rec.i = incarnation;
+			}
 			var packed = Durable.encode(rec.read(), rec.kind);
 			if (packed != null)
 				out.push({k: rec.key, i: rec.i, s: rec.s, v: packed});
@@ -203,10 +226,12 @@ class Shared {
 			onRefused('a value arrived for "$key", which this build does not declare; ignored.');
 			return false;
 		}
-		if (owns(rec.owner)) {
-			onRefused('a value arrived for "$key", which this party owns; ignored.');
+		// My own cell, coming back to me. Not a refusal and not worth a word:
+		// once devices relay what they hold, an owner routinely hears its own
+		// value echoed by a peer that is passing on what it has. It is simply
+		// not newer than what the owner holds, which is the whole answer.
+		if (owns(rec.owner))
 			return false;
-		}
 		var v = Durable.decode(packed, rec.kind);
 		if (v == null) {
 			onRefused('a value arrived for "$key" with the wrong kind ("$packed", wanted ${rec.kind}); ignored.');
