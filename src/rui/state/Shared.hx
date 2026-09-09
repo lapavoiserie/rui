@@ -14,8 +14,9 @@ interface SharedCarrier {
 	function carryCell(key:String, i:Int, s:Int, packed:String):Void;
 
 	/** A cell another party owns was written *here*. Carry the request to
-		its owner. `false` when no owner can be reached right now. **/
-	function carryIntent(key:String, packed:String):Bool;
+		`owner` — the party, so the wire can route it rather than shout it at
+		everyone. `false` when that party cannot be reached right now. **/
+	function carryIntent(key:String, owner:String, packed:String):Bool;
 
 	/** An `@:intent` method meant for another party was called here. **/
 	function carryCall(name:String, owner:String, args:Array<Dynamic>):Bool;
@@ -161,7 +162,7 @@ class Shared {
 			return false;
 		}
 		var c = carrier;
-		if (c == null || !c.carryIntent(rec.key, packed))
+		if (c == null || !c.carryIntent(rec.key, rec.owner, packed))
 			onRefused('"${rec.key}" belongs to ${rec.owner}, which cannot be reached: the write was not made.');
 		return true;
 	}

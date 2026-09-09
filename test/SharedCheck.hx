@@ -182,7 +182,7 @@ private class End implements rui.state.Shared.SharedCarrier {
 		far.receiveCell(key, i, s, packed);
 	}
 
-	public function carryIntent(key:String, packed:String):Bool {
+	public function carryIntent(key:String, owner:String, packed:String):Bool {
 		if (wire.down)
 			return false;
 		wire.count++;
